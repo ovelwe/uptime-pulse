@@ -1,20 +1,27 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Sse, MessageEvent } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
-import * as metricsService_1 from './metrics.service';
+import { MetricsService, CreateMetricDto } from './metrics.service';
+import { Observable, map } from 'rxjs';
 
 @Controller('metrics')
 export class MetricsController {
-    constructor(private readonly metricsService: metricsService_1.MetricsService) {
-    }
+    constructor(private readonly metricsService: MetricsService) {}
 
     @EventPattern('metric_created')
-    async handleMetricEvent(@Payload() dto: metricsService_1.CreateMetricDto) {
-        console.log(`Метрика из RabbitMQ: ${dto.url} (${dto.responseTime}ms)`);
+    async handleMetricEvent(@Payload() dto: CreateMetricDto) {
+        console.log(`Получена метрика из RabbitMQ: ${dto.url} (${dto.responseTime}ms)`);
         await this.metricsService.create(dto);
     }
 
+    @Sse('stream')
+    streamMetrics(): Observable<MessageEvent> {
+        return this.metricsService.metrics$.asObservable().pipe(
+            map((data) => ({ data: JSON.stringify(data) })),
+        );
+    }
+
     @Post()
-    async create(@Body() dto: metricsService_1.CreateMetricDto) {
+    async create(@Body() dto: CreateMetricDto) {
         return this.metricsService.create(dto);
     }
 

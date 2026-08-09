@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: uptime_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: uptimedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: uptime_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: uptime_server
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgrespassword@postgres:5432/uptimedb?schema=public"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+    command: sh -c "npx prisma db push && node dist/src/main.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: uptime_client
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: uptime_worker
+    environment:
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      SERVER_URL: "http://server:3001"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

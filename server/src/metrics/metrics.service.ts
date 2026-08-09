@@ -1,21 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { Subject } from 'rxjs';
 
-export interface CreateMetricDto {
-    url: string;
-    statusCode: number;
-    responseTime: number;
+export class CreateMetricDto {
+    url!: string;
+    statusCode!: number;
+    responseTime!: number;
     error?: string;
 }
 
 @Injectable()
 export class MetricsService {
+    public readonly metrics$ = new Subject<any>();
+
     constructor(private prisma: PrismaService) {}
 
     async create(dto: CreateMetricDto) {
-        return this.prisma.metric.create({
+        const metric = await this.prisma.metric.create({
             data: dto,
         });
+
+        this.metrics$.next(metric);
+        return metric;
     }
 
     async findByUrl(url: string) {
